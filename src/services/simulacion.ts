@@ -35,6 +35,7 @@ interface Servidor {
 type EstadoCliente = 'enCaja' | 'enEmpleado' | 'enEmpleada'
 
 interface Cliente {
+  numero: number
   relojLlegada: number
   estado: EstadoCliente
   enCola: boolean
@@ -81,7 +82,7 @@ function destinoCliente() {
   if (primerDestino === 'actualización') {
     rndSegundoDestino = Math.random()
     segundoDestino =
-      rndSegundoDestino < parametros.proporcionFacturasVencidas
+      rndSegundoDestino < parametros.proporcionActualizacion
         ? 'informes'
         : 'actualización'
   }
@@ -142,6 +143,8 @@ export function simulacion(): [number, unknown[]] {
     }),
   )
 
+  let cantidadClientes = 0
+
   let valoresGuardadosNormal:
     | { rnd1: number; rnd2: number; tiempoGuardado: number }
     | undefined
@@ -155,7 +158,10 @@ export function simulacion(): [number, unknown[]] {
     if (finSimulacion) break
 
     const relojActual = evento.reloj
-    const valores: Record<string, Destino | number | undefined | Servidor[]> = {
+    const valores: Record<
+      string,
+      string | Destino | number | undefined | Servidor[]
+    > = {
       relojActual,
 
       colaCajas: colaCajas.length,
@@ -169,6 +175,7 @@ export function simulacion(): [number, unknown[]] {
           tipo: 'llegada',
           reloj: 0,
           cliente: {
+            numero: ++cantidadClientes,
             relojLlegada: 0,
             estado: 'enCaja',
             enCola: false,
@@ -190,6 +197,7 @@ export function simulacion(): [number, unknown[]] {
           tipo: 'llegada',
           reloj: proximaLlegada,
           cliente: {
+            numero: ++cantidadClientes,
             relojLlegada: relojActual,
             estado: 'enCaja',
             enCola: false,
@@ -213,6 +221,7 @@ export function simulacion(): [number, unknown[]] {
 
           if (colaCajas.length > 0 || !servidor) {
             colaCajas.push({
+              numero: ++cantidadClientes,
               relojLlegada: relojActual,
               estado: 'enCaja',
               enCola: true,
@@ -234,6 +243,7 @@ export function simulacion(): [number, unknown[]] {
             tipo: 'finAtencion',
             reloj: tiempoFinCobro,
             cliente: {
+              numero: ++cantidadClientes,
               relojLlegada: relojActual,
               estado: 'enCaja',
               enCola: false,
@@ -249,6 +259,7 @@ export function simulacion(): [number, unknown[]] {
 
           if (colaEmpleados.length > 0 || !servidor) {
             colaEmpleados.push({
+              numero: ++cantidadClientes,
               relojLlegada: relojActual,
               estado: 'enEmpleado',
               enCola: true,
@@ -269,6 +280,7 @@ export function simulacion(): [number, unknown[]] {
             tipo: 'finAtencion',
             reloj: tiempoFinActualizacion,
             cliente: {
+              numero: ++cantidadClientes,
               relojLlegada: relojActual,
               estado: 'enEmpleado',
               enCola: false,
@@ -286,6 +298,7 @@ export function simulacion(): [number, unknown[]] {
 
           if (colaEmpleadas.length > 0 || !servidor) {
             colaEmpleadas.push({
+              numero: ++cantidadClientes,
               relojLlegada: relojActual,
               estado: 'enEmpleada',
               enCola: true,
@@ -327,6 +340,7 @@ export function simulacion(): [number, unknown[]] {
             tipo: 'finAtencion',
             reloj: tiempoFinInformes,
             cliente: {
+              numero: ++cantidadClientes,
               relojLlegada: relojActual,
               estado: 'enEmpleada',
               enCola: false,
@@ -480,6 +494,12 @@ export function simulacion(): [number, unknown[]] {
         break
       }
     }
+
+    valores.evento = `${evento.tipo}${
+      evento.tipo === 'llegada' || evento.tipo === 'finAtencion'
+        ? ` cliente: ${evento.cliente.numero}`
+        : ''
+    }`
 
     valores.servidoresCajas = servidoresCajas
     valores.servidoresEmpleados = servidoresEmpleados
