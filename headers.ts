@@ -113,7 +113,7 @@ export const headers: Header[] = [
           'El tiempo de atención de la empleada, calculado con la distribución normal',
       },
       {
-        name: 'Fin atención (n1) e:$numeroEmpleada', // The param `cantidadEmpleadas` describes the amount of $numeroEmpleada that will be repeated. The number in the name is the first result of the distribution
+        name: 'Fin atención (n1) $numeroEmpleada', // The param `cantidadEmpleadas` describes the amount of $numeroEmpleada that will be repeated. The number in the name is the first result of the distribution
         description:
           'El tiempo en el que termina la atención de la empleada $numeroEmpleada, calculado como la suma del tiempo de atención y el reloj actual si corresponde a dicha empleada',
         repeat: true,

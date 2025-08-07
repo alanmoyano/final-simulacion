@@ -1,5 +1,7 @@
-export default {
-  tiempoSimulacion: 100_000_000,
+import type { ConfiguracionSimulacion } from '@/components/config'
+
+let parametros = {
+  tiempoSimulacion: 50_000,
 
   mediaLlegada: 60,
 
@@ -15,4 +17,15 @@ export default {
   cantidadEmpleadas: 1,
   mediaInforme: 20,
   desviacionInforme: 2,
-} as const
+}
+
+export function configurarParametros(config: ConfiguracionSimulacion) {
+  parametros = {
+    ...parametros,
+    ...config,
+  }
+}
+
+export function getParametros() {
+  return parametros
+}

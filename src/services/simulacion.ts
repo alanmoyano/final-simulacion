@@ -1,5 +1,5 @@
 import { exponencial, normal, uniforme } from '@/services/generadores'
-import parametros from './parametros'
+import { getParametros } from './parametros'
 
 type Destino = 'pago' | 'actualización' | 'informes'
 
@@ -69,37 +69,39 @@ function insertarEventoOrdenado(eventos: Evento[], nuevoEvento: Evento): void {
   eventos.splice(posicion, 0, nuevoEvento)
 }
 
-function destinoCliente() {
-  const rndPrimerDestino = Math.random()
-  const primerDestino: Destino =
-    rndPrimerDestino < parametros.proporcionFacturasVencidas
-      ? 'actualización'
-      : 'pago'
-
-  let rndSegundoDestino: number | undefined
-  let segundoDestino: Destino | undefined
-
-  if (primerDestino === 'actualización') {
-    rndSegundoDestino = Math.random()
-    segundoDestino =
-      rndSegundoDestino < parametros.proporcionActualizacion
-        ? 'informes'
-        : 'actualización'
-  }
-
-  return {
-    primerDestino,
-    segundoDestino,
-    rndPrimerDestino,
-    rndSegundoDestino,
-  }
-}
-
 function obtenerServidorLibre(servidores: Servidor[]) {
   return servidores.find(servidor => !servidor.ocupado)
 }
 
 export function simulacion(): [number, unknown[]] {
+  const parametros = getParametros()
+
+  function destinoCliente() {
+    const rndPrimerDestino = Math.random()
+    const primerDestino: Destino =
+      rndPrimerDestino < parametros.proporcionFacturasVencidas
+        ? 'actualización'
+        : 'pago'
+
+    let rndSegundoDestino: number | undefined
+    let segundoDestino: Destino | undefined
+
+    if (primerDestino === 'actualización') {
+      rndSegundoDestino = Math.random()
+      segundoDestino =
+        rndSegundoDestino < parametros.proporcionActualizacion
+          ? 'informes'
+          : 'actualización'
+    }
+
+    return {
+      primerDestino,
+      segundoDestino,
+      rndPrimerDestino,
+      rndSegundoDestino,
+    }
+  }
+
   const eventos: Evento[] = []
 
   eventos.push({
@@ -145,9 +147,19 @@ export function simulacion(): [number, unknown[]] {
 
   let cantidadClientes = 0
 
+  let acumuladorTiempoEsperaCajas = 0
+  let acumuladorPermanencia = 0
+  let cantidadClientesEnCaja = 0
+
   let valoresGuardadosNormal:
     | { rnd1: number; rnd2: number; tiempoGuardado: number }
     | undefined
+
+  // Persistencia de valores de fin de atención por servidor
+  const finAtencionCajas: Record<number, number | undefined> = {}
+  const finAtencionEmpleados: Record<number, number | undefined> = {}
+  const finAtencionN1Empleadas: Record<number, number | undefined> = {}
+  const finAtencionN2Empleadas: Record<number, number | undefined> = {}
 
   let finSimulacion = false
 
@@ -193,16 +205,18 @@ export function simulacion(): [number, unknown[]] {
         valores.tiempoLlegada = tiempoLlegada
         valores.proximaLlegada = proximaLlegada
 
-        insertarEventoOrdenado(eventos, {
-          tipo: 'llegada',
-          reloj: proximaLlegada,
-          cliente: {
-            numero: ++cantidadClientes,
-            relojLlegada: relojActual,
-            estado: 'enCaja',
-            enCola: false,
-          },
-        })
+        if (proximaLlegada <= parametros.tiempoSimulacion) {
+          insertarEventoOrdenado(eventos, {
+            tipo: 'llegada',
+            reloj: proximaLlegada,
+            cliente: {
+              numero: ++cantidadClientes,
+              relojLlegada: proximaLlegada,
+              estado: 'enCaja',
+              enCola: false,
+            },
+          })
+        }
 
         const {
           primerDestino,
@@ -221,7 +235,7 @@ export function simulacion(): [number, unknown[]] {
 
           if (colaCajas.length > 0 || !servidor) {
             colaCajas.push({
-              numero: ++cantidadClientes,
+              numero: evento.cliente.numero,
               relojLlegada: relojActual,
               estado: 'enCaja',
               enCola: true,
@@ -239,11 +253,14 @@ export function simulacion(): [number, unknown[]] {
 
           servidor.ocupado = true
 
+          // Guardar fin de atención para este servidor específico
+          finAtencionCajas[servidor.numero] = tiempoFinCobro
+
           insertarEventoOrdenado(eventos, {
             tipo: 'finAtencion',
             reloj: tiempoFinCobro,
             cliente: {
-              numero: ++cantidadClientes,
+              numero: evento.cliente.numero,
               relojLlegada: relojActual,
               estado: 'enCaja',
               enCola: false,
@@ -259,7 +276,7 @@ export function simulacion(): [number, unknown[]] {
 
           if (colaEmpleados.length > 0 || !servidor) {
             colaEmpleados.push({
-              numero: ++cantidadClientes,
+              numero: evento.cliente.numero,
               relojLlegada: relojActual,
               estado: 'enEmpleado',
               enCola: true,
@@ -276,11 +293,14 @@ export function simulacion(): [number, unknown[]] {
 
           servidor.ocupado = true
 
+          // Guardar fin de atención para este servidor específico
+          finAtencionEmpleados[servidor.numero] = tiempoFinActualizacion
+
           insertarEventoOrdenado(eventos, {
             tipo: 'finAtencion',
             reloj: tiempoFinActualizacion,
             cliente: {
-              numero: ++cantidadClientes,
+              numero: evento.cliente.numero,
               relojLlegada: relojActual,
               estado: 'enEmpleado',
               enCola: false,
@@ -298,7 +318,7 @@ export function simulacion(): [number, unknown[]] {
 
           if (colaEmpleadas.length > 0 || !servidor) {
             colaEmpleadas.push({
-              numero: ++cantidadClientes,
+              numero: evento.cliente.numero,
               relojLlegada: relojActual,
               estado: 'enEmpleada',
               enCola: true,
@@ -336,11 +356,20 @@ export function simulacion(): [number, unknown[]] {
 
           servidor.ocupado = true
 
+          // Guardar fin de atención para este servidor específico
+          if (valoresGuardadosNormal) {
+            finAtencionN1Empleadas[servidor.numero] = tiempoFinInformes
+            finAtencionN2Empleadas[servidor.numero] =
+              valoresGuardadosNormal.tiempoGuardado + relojActual
+          } else {
+            finAtencionN2Empleadas[servidor.numero] = tiempoFinInformes
+          }
+
           insertarEventoOrdenado(eventos, {
             tipo: 'finAtencion',
             reloj: tiempoFinInformes,
             cliente: {
-              numero: ++cantidadClientes,
+              numero: evento.cliente.numero,
               relojLlegada: relojActual,
               estado: 'enEmpleada',
               enCola: false,
@@ -357,14 +386,22 @@ export function simulacion(): [number, unknown[]] {
       case 'finAtencion': {
         switch (evento.servidor.tipo) {
           case 'caja': {
+            acumuladorPermanencia += relojActual - evento.cliente.relojLlegada
+            cantidadClientesEnCaja++
+
             if (colaCajas.length === 0) {
               evento.servidor.ocupado = false
+              // Limpiar el fin de atención para este servidor
+              finAtencionCajas[evento.servidor.numero] = undefined
 
               break
             }
 
             const nuevoCliente = colaCajas.shift() as Cliente
             nuevoCliente.enCola = false
+
+            acumuladorTiempoEsperaCajas +=
+              relojActual - nuevoCliente.relojLlegada
 
             const [rndCobro, tiempoCobro] = uniforme(
               parametros.minCobro,
@@ -373,6 +410,9 @@ export function simulacion(): [number, unknown[]] {
 
             const tiempoFinCobro = tiempoCobro + relojActual
             evento.servidor.ocupado = true
+
+            // Actualizar fin de atención para este servidor específico
+            finAtencionCajas[evento.servidor.numero] = tiempoFinCobro
 
             insertarEventoOrdenado(eventos, {
               tipo: 'finAtencion',
@@ -396,6 +436,8 @@ export function simulacion(): [number, unknown[]] {
 
             if (colaEmpleados.length === 0) {
               evento.servidor.ocupado = false
+              // Limpiar el fin de atención para este servidor
+              finAtencionEmpleados[evento.servidor.numero] = undefined
 
               break
             }
@@ -410,6 +452,10 @@ export function simulacion(): [number, unknown[]] {
             const tiempoFinActualizacion = tiempoActualizacion + relojActual
 
             evento.servidor.ocupado = true
+
+            // Actualizar fin de atención para este servidor específico
+            finAtencionEmpleados[evento.servidor.numero] =
+              tiempoFinActualizacion
 
             insertarEventoOrdenado(eventos, {
               tipo: 'finAtencion',
@@ -433,6 +479,9 @@ export function simulacion(): [number, unknown[]] {
 
             if (colaEmpleadas.length === 0) {
               evento.servidor.ocupado = false
+              // Limpiar el fin de atención para este servidor
+              finAtencionN1Empleadas[evento.servidor.numero] = undefined
+              finAtencionN2Empleadas[evento.servidor.numero] = undefined
 
               break
             }
@@ -457,8 +506,6 @@ export function simulacion(): [number, unknown[]] {
                 tiempoGuardado: tiempoInformes2,
               }
 
-              evento.servidor.ocupado = true
-
               valores.rndInformes1 = rndInformes1
               valores.rndInformes2 = rndInformes2
               valores.tiempoInformes1 = tiempoInformes1
@@ -468,6 +515,17 @@ export function simulacion(): [number, unknown[]] {
                 valoresGuardadosNormal.tiempoGuardado + relojActual
 
               valoresGuardadosNormal = undefined
+            }
+
+            evento.servidor.ocupado = true
+
+            // Actualizar fin de atención para este servidor específico
+            if (valoresGuardadosNormal) {
+              finAtencionN1Empleadas[evento.servidor.numero] = tiempoFinInformes
+              finAtencionN2Empleadas[evento.servidor.numero] =
+                valoresGuardadosNormal.tiempoGuardado + relojActual
+            } else {
+              finAtencionN2Empleadas[evento.servidor.numero] = tiempoFinInformes
             }
 
             insertarEventoOrdenado(eventos, {
@@ -501,9 +559,35 @@ export function simulacion(): [number, unknown[]] {
         : ''
     }`
 
+    valores.acumuladorTiempoEsperaCajas = acumuladorTiempoEsperaCajas
+    valores.acumuladorPermanencia = acumuladorPermanencia
+    valores.cantidadClientesEnCaja = cantidadClientesEnCaja
+
+    valores.promedioTiempoEsperaCajas =
+      cantidadClientesEnCaja > 0
+        ? acumuladorTiempoEsperaCajas / cantidadClientesEnCaja
+        : 0
+
+    valores.promedioPermanencia =
+      cantidadClientesEnCaja > 0
+        ? acumuladorPermanencia / cantidadClientesEnCaja
+        : 0
+
     valores.servidoresCajas = servidoresCajas
     valores.servidoresEmpleados = servidoresEmpleados
     valores.servidoresEmpleadas = servidoresEmpleadas
+
+    // Asignar valores de fin de atención por servidor dinámicamente
+    for (let i = 1; i <= parametros.cantidadCajas; i++) {
+      valores[`finAtencionCaja${i}`] = finAtencionCajas[i]
+    }
+    for (let i = 1; i <= parametros.cantidadEmpleados; i++) {
+      valores[`finAtencionEmpleado${i}`] = finAtencionEmpleados[i]
+    }
+    for (let i = 1; i <= parametros.cantidadEmpleadas; i++) {
+      valores[`finAtencionN1Empleada${i}`] = finAtencionN1Empleadas[i]
+      valores[`finAtencionN2Empleada${i}`] = finAtencionN2Empleadas[i]
+    }
 
     // console.log(`${evento.reloj}`, valores)
     // console.log(evento.reloj, eventos)
